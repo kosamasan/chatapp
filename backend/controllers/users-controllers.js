@@ -22,7 +22,7 @@ const signup = async (req, res, next) => {
 		return next(HttpError('Invalid input', 422));
 	}
 
-	const { name, email, password, places } = req.body;
+	const { name, email, password } = req.body;
 
 	let existingUser;
 	try {
@@ -42,7 +42,7 @@ const signup = async (req, res, next) => {
 		email,
 		image: 'https://static.thenounproject.com/png/17241-200.png',
 		password,
-		places,
+		places: [],
 	});
 
 	try {
