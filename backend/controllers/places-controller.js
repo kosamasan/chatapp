@@ -1,23 +1,12 @@
 const { v4: uuidv4 } = require('uuid');
 const { validationResult } = require('express-validator');
+const mongoose = require('mongoose');
 
 const HttpError = require('../models/http-error');
 const getCoordsForAddress = require('../util/location');
 const Place = require('../models/place');
-
-let DUMMY_PLACES = [
-	{
-		id: 'p1',
-		title: 'Empire State Building',
-		description: 'famous building',
-		location: {
-			lat: 40.7484474,
-			lng: -73.9871516,
-		},
-		address: 'New York, NY 10001',
-		creator: 'u1',
-	},
-];
+const User = require('../models/user');
+const { use } = require('../routes/users-routes');
 
 const getPlaceById = async (req, res, next) => {
 	const placeId = req.params.pid;
@@ -80,8 +69,27 @@ const createPlace = async (req, res, next) => {
 		creator,
 	});
 
+	let user;
 	try {
-		await createdPlace.save();
+		user = await User.findById(creator);
+	} catch (err) {
+		const error = new HttpError('Something went wrong', 500);
+		return next(error);
+	}
+
+	if (!user) {
+		const error = new HttpError('Could not find user with the provided id', 404);
+		return next(error);
+	}
+
+	try {
+		// we will use transactions here. If one operation fails, then all should fail
+		const sess = await mongoose.startSession();
+		sess.startTransaction();
+		await createdPlace.save({ session: sess });
+		user.places.push(createdPlace);
+		await user.save({ session: sess });
+		await sess.commitTransaction();
 	} catch (err) {
 		const error = new HttpError('Creating place failed', 500);
 		return next(error);
@@ -107,7 +115,6 @@ const updatePlace = async (req, res, next) => {
 		return next(error);
 	}
 
-	
 	place.title = title;
 	place.description = description;
 
@@ -126,14 +133,25 @@ const deletePlace = async (req, res, next) => {
 	
 	let place;
 	try {
-		place = await Place.findById(placeId);
+		place = await Place.findById(placeId).populate('creator');
 	} catch (err) {
 		const error = new HttpError('Something went wrong', 500);
 		return next(error);
 	}
 
+	if (!place) {
+		const error = new HttpError('No place found for this id', 404);
+		return next(error);
+	}
+
 	try {
-		await place.remove();
+		const sess = await mongoose.startSession();
+		sess.startTransaction();
+		await place.remove({session: sess});
+		// remove the place 
+		place.creator.places.pull(place);
+		await place.creator.save({session: sess});
+		await sess.commitTransaction();
 	} catch (err) {
 		const error = new HttpError('Something went wrong', 500);
 		return next(error);
