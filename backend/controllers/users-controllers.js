@@ -39,7 +39,7 @@ const signup = async (req, res, next) => {
 	const createdUser = new User({
 		name,
 		email,
-		image: 'https://static.thenounproject.com/png/17241-200.png',
+		image: req.file.path,
 		password,
 		places: [],
 	});
